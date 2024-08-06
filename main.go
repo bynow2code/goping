@@ -23,7 +23,7 @@ func init() {
 
 func main() {
 	timeout := 3000 * time.Millisecond
-	conn, err := net.DialTimeout("ip:icmp", "bing.com", timeout)
+	conn, err := net.DialTimeout("ip4:icmp", "bing.com", timeout)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -36,14 +36,14 @@ func main() {
 		Type:           8,
 		Code:           0,
 		Checksum:       0,
-		Identifier:     1,
-		SequenceNumber: 1,
+		Identifier:     0,
+		SequenceNumber: 0,
 	}
 
 	var buffer bytes.Buffer
 
 	binary.Write(&buffer, binary.BigEndian, icmp)
-	data := make([]byte, 6)
+	data := make([]byte, 48)
 	binary.Write(&buffer, binary.BigEndian, data)
 
 	request := buffer.Bytes()
