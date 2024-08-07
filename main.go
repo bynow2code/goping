@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"time"
 )
 
@@ -32,39 +33,37 @@ func main() {
 
 	conn.SetDeadline(time.Now().Add(timeout))
 
+	pid := os.Getpid()
+	identifier := []byte{byte(pid >> 8), byte(pid & 0xfff)}
 	icmp := ICMP{
 		Type:           8,
 		Code:           0,
 		Checksum:       0,
-		Identifier:     0,
+		Identifier:     binary.BigEndian.Uint16(identifier),
 		SequenceNumber: 0,
 	}
 
 	var buffer bytes.Buffer
-
 	binary.Write(&buffer, binary.BigEndian, icmp)
 	data := make([]byte, 48)
 	binary.Write(&buffer, binary.BigEndian, data)
-
 	request := buffer.Bytes()
 	checkSum := calculateICMPChecksum(request)
 	request[2] = byte(checkSum >> 8)
 	request[3] = byte(checkSum)
 
-	fmt.Println(request)
-
 	_, err = conn.Write(request)
 	if err != nil {
-		log.Println(err.Error())
-		return
+		log.Fatalln(err.Error())
 	}
 
 	response := make([]byte, 1024)
 	_, err = conn.Read(response)
 	if err != nil {
-		log.Println(err.Error())
-		return
+		log.Fatalln(err.Error())
 	}
+
+	fmt.Println(conn.RemoteAddr())
 }
 
 func calculateICMPChecksum(buf []byte) uint16 {
