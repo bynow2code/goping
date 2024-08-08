@@ -16,6 +16,7 @@ type ICMP struct {
 	Checksum       uint16
 	Identifier     uint16
 	SequenceNumber uint16
+	Data           [48]byte
 }
 
 func init() {
@@ -23,47 +24,54 @@ func init() {
 }
 
 func main() {
+	address := "bing.com"
 	timeout := 3000 * time.Millisecond
-	conn, err := net.DialTimeout("ip4:icmp", "bing.com", timeout)
+	conn, err := net.DialTimeout("ip4:icmp", address, timeout)
 	if err != nil {
 		log.Println(err.Error())
 		return
 	}
 	defer conn.Close()
 
-	conn.SetDeadline(time.Now().Add(timeout))
+	var icmp ICMP
+	remoteAddr := conn.RemoteAddr()
+	fmt.Printf("PING %s (%s): %d data bytes\n", address, remoteAddr, binary.Size(icmp))
 
-	pid := os.Getpid()
-	identifier := []byte{byte(pid >> 8), byte(pid & 0xfff)}
-	icmp := ICMP{
-		Type:           8,
-		Code:           0,
-		Checksum:       0,
-		Identifier:     binary.BigEndian.Uint16(identifier),
-		SequenceNumber: 0,
+	for i := 0; i < 5; i++ {
+		icmp = ICMP{Type: 8, SequenceNumber: uint16(i)}
+
+		pid := os.Getpid()
+		icmp.Identifier = binary.BigEndian.Uint16([]byte{byte(pid >> 8), byte(pid & 0xfff)})
+
+		conn.SetDeadline(time.Now().Add(timeout))
+
+		var buffer bytes.Buffer
+		err := binary.Write(&buffer, binary.BigEndian, icmp)
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+
+		request := buffer.Bytes()
+		checkSum := calculateICMPChecksum(request)
+		request[2] = byte(checkSum >> 8)
+		request[3] = byte(checkSum)
+
+		_, err = conn.Write(request)
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+
+		response := make([]byte, 1024)
+		startReplyTime := time.Now()
+		readN, err := conn.Read(response)
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+
+		replyTime := float64(time.Since(startReplyTime).Nanoseconds()) / float64(time.Millisecond)
+		fmt.Printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n", readN-20, remoteAddr, icmp.SequenceNumber, response[8], replyTime)
+		time.Sleep(time.Second)
 	}
-
-	var buffer bytes.Buffer
-	binary.Write(&buffer, binary.BigEndian, icmp)
-	data := make([]byte, 48)
-	binary.Write(&buffer, binary.BigEndian, data)
-	request := buffer.Bytes()
-	checkSum := calculateICMPChecksum(request)
-	request[2] = byte(checkSum >> 8)
-	request[3] = byte(checkSum)
-
-	_, err = conn.Write(request)
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
-
-	response := make([]byte, 1024)
-	_, err = conn.Read(response)
-	if err != nil {
-		log.Fatalln(err.Error())
-	}
-
-	fmt.Println(conn.RemoteAddr())
 }
 
 func calculateICMPChecksum(buf []byte) uint16 {
