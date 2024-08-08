@@ -21,15 +21,16 @@ type ICMP struct {
 
 var (
 	address string
+	count   int           = 100
+	timeout time.Duration = 1000 * time.Millisecond
 )
 
 func init() {
 	log.SetFlags(log.Llongfile)
-	getAddress()
+	setAddress()
 }
 
 func main() {
-	timeout := 3000 * time.Millisecond
 	conn, err := net.DialTimeout("ip4:icmp", address, timeout)
 	if err != nil {
 		log.Println(err.Error())
@@ -41,13 +42,11 @@ func main() {
 	remoteAddr := conn.RemoteAddr()
 	fmt.Printf("PING %s (%s): %d data bytes\n", address, remoteAddr, binary.Size(icmp))
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < count; i++ {
 		icmp = ICMP{Type: 8, SequenceNumber: uint16(i)}
 
 		pid := os.Getpid()
 		icmp.Identifier = binary.BigEndian.Uint16([]byte{byte(pid >> 8), byte(pid & 0xfff)})
-
-		conn.SetDeadline(time.Now().Add(timeout))
 
 		var buffer bytes.Buffer
 		err := binary.Write(&buffer, binary.BigEndian, icmp)
@@ -60,6 +59,11 @@ func main() {
 		request[2] = byte(checkSum >> 8)
 		request[3] = byte(checkSum)
 
+		err = conn.SetDeadline(time.Now().Add(timeout))
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+
 		_, err = conn.Write(request)
 		if err != nil {
 			log.Fatalln(err.Error())
@@ -69,7 +73,8 @@ func main() {
 		startReplyTime := time.Now()
 		readN, err := conn.Read(response)
 		if err != nil {
-			log.Fatalln(err.Error())
+			fmt.Printf("Request timeout for icmp_seq %d\n", icmp.SequenceNumber)
+			continue
 		}
 
 		replyTime := float64(time.Since(startReplyTime).Nanoseconds()) / float64(time.Millisecond)
@@ -77,7 +82,7 @@ func main() {
 		time.Sleep(time.Second)
 	}
 }
-func getAddress() {
+func setAddress() {
 	if len(os.Args) == 1 {
 		log.Fatalln("Address required")
 	}
