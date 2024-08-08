@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -31,6 +33,9 @@ func init() {
 }
 
 func main() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT)
+
 	conn, err := net.DialTimeout("ip4:icmp", address, timeout)
 	if err != nil {
 		log.Println(err.Error())
@@ -42,44 +47,51 @@ func main() {
 	remoteAddr := conn.RemoteAddr()
 	fmt.Printf("PING %s (%s): %d data bytes\n", address, remoteAddr, binary.Size(icmp))
 
-	for i := 0; i < count; i++ {
-		icmp = ICMP{Type: 8, SequenceNumber: uint16(i)}
+	i := 0
+	for {
+		select {
+		case <-sigChan:
+			fmt.Printf("\n--- %s ping statistics ---\n", address)
+			os.Exit(1)
+		default:
+			icmp = ICMP{Type: 8, SequenceNumber: uint16(i)}
 
-		pid := os.Getpid()
-		icmp.Identifier = binary.BigEndian.Uint16([]byte{byte(pid >> 8), byte(pid & 0xfff)})
+			pid := os.Getpid()
+			icmp.Identifier = binary.BigEndian.Uint16([]byte{byte(pid >> 8), byte(pid & 0xfff)})
 
-		var buffer bytes.Buffer
-		err := binary.Write(&buffer, binary.BigEndian, icmp)
-		if err != nil {
-			log.Fatalln(err.Error())
+			var buffer bytes.Buffer
+			err := binary.Write(&buffer, binary.BigEndian, icmp)
+			if err != nil {
+				log.Fatalln(err.Error())
+			}
+
+			request := buffer.Bytes()
+			checkSum := calculateICMPChecksum(request)
+			request[2] = byte(checkSum >> 8)
+			request[3] = byte(checkSum)
+
+			err = conn.SetDeadline(time.Now().Add(timeout))
+			if err != nil {
+				log.Fatalln(err.Error())
+			}
+
+			_, err = conn.Write(request)
+			if err != nil {
+				log.Fatalln(err.Error())
+			}
+
+			response := make([]byte, 1024)
+			startReplyTime := time.Now()
+			readN, err := conn.Read(response)
+			if err != nil {
+				fmt.Printf("Request timeout for icmp_seq %d\n", icmp.SequenceNumber)
+				continue
+			}
+
+			replyTime := float64(time.Since(startReplyTime).Nanoseconds()) / float64(time.Millisecond)
+			fmt.Printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n", readN-20, remoteAddr, icmp.SequenceNumber, response[8], replyTime)
+			time.Sleep(time.Second)
 		}
-
-		request := buffer.Bytes()
-		checkSum := calculateICMPChecksum(request)
-		request[2] = byte(checkSum >> 8)
-		request[3] = byte(checkSum)
-
-		err = conn.SetDeadline(time.Now().Add(timeout))
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-
-		_, err = conn.Write(request)
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-
-		response := make([]byte, 1024)
-		startReplyTime := time.Now()
-		readN, err := conn.Read(response)
-		if err != nil {
-			fmt.Printf("Request timeout for icmp_seq %d\n", icmp.SequenceNumber)
-			continue
-		}
-
-		replyTime := float64(time.Since(startReplyTime).Nanoseconds()) / float64(time.Millisecond)
-		fmt.Printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n", readN-20, remoteAddr, icmp.SequenceNumber, response[8], replyTime)
-		time.Sleep(time.Second)
 	}
 }
 func setAddress() {
