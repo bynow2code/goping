@@ -19,12 +19,16 @@ type ICMP struct {
 	Data           [48]byte
 }
 
+var (
+	address string
+)
+
 func init() {
 	log.SetFlags(log.Llongfile)
+	getAddress()
 }
 
 func main() {
-	address := "bing.com"
 	timeout := 3000 * time.Millisecond
 	conn, err := net.DialTimeout("ip4:icmp", address, timeout)
 	if err != nil {
@@ -73,7 +77,12 @@ func main() {
 		time.Sleep(time.Second)
 	}
 }
-
+func getAddress() {
+	if len(os.Args) == 1 {
+		log.Fatalln("Address required")
+	}
+	address = os.Args[len(os.Args)-1]
+}
 func calculateICMPChecksum(buf []byte) uint16 {
 	var sum uint32
 	// 处理奇数长度的情况
