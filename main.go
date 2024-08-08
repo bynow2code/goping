@@ -52,7 +52,7 @@ func main() {
 		select {
 		case <-sigChan:
 			fmt.Printf("\n--- %s ping statistics ---\n", address)
-			os.Exit(1)
+			os.Exit(0)
 		default:
 			icmp = ICMP{Type: 8, SequenceNumber: uint16(i)}
 
