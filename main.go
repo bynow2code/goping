@@ -33,27 +33,19 @@ func init() {
 }
 
 func main() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT)
+	go func() {
+		conn, err := net.DialTimeout("ip4:icmp", address, timeout)
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+		defer conn.Close()
 
-	conn, err := net.DialTimeout("ip4:icmp", address, timeout)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
-	defer conn.Close()
+		var icmp ICMP
+		remoteAddr := conn.RemoteAddr()
+		fmt.Printf("PING %s (%s): %d data bytes\n", address, remoteAddr, binary.Size(icmp))
 
-	var icmp ICMP
-	remoteAddr := conn.RemoteAddr()
-	fmt.Printf("PING %s (%s): %d data bytes\n", address, remoteAddr, binary.Size(icmp))
-
-	i := 0
-	for {
-		select {
-		case <-sigChan:
-			fmt.Printf("\n--- %s ping statistics ---\n", address)
-			os.Exit(0)
-		default:
+		for i := 0; ; i++ {
 			icmp = ICMP{Type: 8, SequenceNumber: uint16(i)}
 
 			pid := os.Getpid()
@@ -92,7 +84,13 @@ func main() {
 			fmt.Printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n", readN-20, remoteAddr, icmp.SequenceNumber, response[8], replyTime)
 			time.Sleep(time.Second)
 		}
-	}
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT)
+	<-sigChan
+	fmt.Printf("\n--- %s ping statistics ---\n", address)
+	os.Exit(0)
 }
 func setAddress() {
 	if len(os.Args) == 1 {
