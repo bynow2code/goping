@@ -74,8 +74,9 @@ func main() {
 			_, err = conn.Write(request)
 			if err != nil {
 				log.Fatalln(err.Error())
+			} else {
+				transmitted++
 			}
-			transmitted++
 
 			response := make([]byte, 1024)
 			startReplyTime := time.Now()
@@ -84,8 +85,9 @@ func main() {
 				fmt.Printf("Request timeout for icmp_seq %d\n", icmp.SequenceNumber)
 				time.Sleep(time.Second)
 				continue
+			} else {
+				received++
 			}
-			received++
 
 			replyTime := float64(time.Since(startReplyTime).Nanoseconds()) / float64(time.Millisecond)
 			fmt.Printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n", readN-20, remoteAddr, icmp.SequenceNumber, response[8], replyTime)
