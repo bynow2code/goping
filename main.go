@@ -23,8 +23,12 @@ type ICMP struct {
 
 var (
 	address string
-	count   int           = 100
 	timeout time.Duration = 1000 * time.Millisecond
+)
+
+var (
+	transmitted int
+	received    int
 )
 
 func init() {
@@ -71,14 +75,17 @@ func main() {
 			if err != nil {
 				log.Fatalln(err.Error())
 			}
+			transmitted++
 
 			response := make([]byte, 1024)
 			startReplyTime := time.Now()
 			readN, err := conn.Read(response)
 			if err != nil {
 				fmt.Printf("Request timeout for icmp_seq %d\n", icmp.SequenceNumber)
+				time.Sleep(time.Second)
 				continue
 			}
+			received++
 
 			replyTime := float64(time.Since(startReplyTime).Nanoseconds()) / float64(time.Millisecond)
 			fmt.Printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n", readN-20, remoteAddr, icmp.SequenceNumber, response[8], replyTime)
@@ -90,8 +97,9 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT)
 	<-sigChan
 	fmt.Printf("\n--- %s ping statistics ---\n", address)
-	fmt.Printf("%d packets transmitted, %d packets received, 0.0%% packet loss\n", 3, 3)
-	fmt.Printf("round-trip min/avg/max/stddev = %.3f/12.692/12.891/0.143 ms\n", 3.1)
+	loss := float64(transmitted-received) / float64(transmitted) * 100
+	fmt.Printf("%d packets transmitted, %d packets received, %.2f%% packet loss\n", transmitted, received, loss)
+	//fmt.Printf("round-trip min/avg/max/stddev = %.3f/12.692/12.891/0.143 ms\n", 3.1)
 	os.Exit(0)
 }
 func setAddress() {
