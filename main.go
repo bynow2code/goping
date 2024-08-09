@@ -23,7 +23,7 @@ type ICMP struct {
 
 var (
 	address string
-	timeout time.Duration = 3 * time.Millisecond
+	timeout time.Duration = 1000 * time.Millisecond
 )
 
 var (
