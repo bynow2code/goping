@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -27,6 +28,9 @@ var (
 )
 
 var (
+	minDelay    int64 = math.MinInt64
+	maxDelay    int64 = math.MaxInt64
+	avgDelay    float64
 	transmitted int
 	received    int
 )
@@ -89,7 +93,11 @@ func main() {
 				continue
 			} else {
 				received++
-				replyTime := float64(time.Since(startReplyTime).Nanoseconds()) / float64(time.Millisecond)
+				t := time.Since(startReplyTime).Nanoseconds()
+				replyTime := float64(t) / float64(time.Millisecond)
+				maxDelay = max(t, maxDelay)
+				minDelay = min(t, minDelay)
+
 				fmt.Printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n", r-20, remoteAddr, icmp.SequenceNumber, response[8], replyTime)
 				time.Sleep(time.Second)
 			}
@@ -103,7 +111,8 @@ func main() {
 	loss := float64(transmitted-received) / float64(transmitted) * 100
 	fmt.Printf("\n--- %s ping statistics ---\n", address)
 	fmt.Printf("%d packets transmitted, %d packets received, %.2f%% packet loss\n", transmitted, received, loss)
-	//fmt.Printf("round-trip min/avg/max/stddev = %.3f/12.692/12.891/0.143 ms\n", 3.1)
+
+	fmt.Printf("round-trip min/avg/max/stddev = %.3f/12.692/12.891/0.143 ms\n", 3.1)
 	os.Exit(0)
 }
 
