@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/bynow2code/goping/internal/gpconn"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,7 +23,7 @@ type ICMP struct {
 
 var (
 	address string
-	timeout time.Duration = 1000 * time.Millisecond
+	timeout time.Duration = 3 * time.Millisecond
 )
 
 var (
@@ -38,25 +38,25 @@ func init() {
 
 func main() {
 	go func() {
-		gpc := gpconn.DialTimeout(address, timeout)
-		defer gpc.Close()
-
-		icmp := ICMP{}
-		remoteAddr := gpc.RemoteAddr()
-		fmt.Printf("PING %s (%s): %d data bytes\n", address, remoteAddr, binary.Size(icmp))
-
 		for i := 0; ; i++ {
-			if !gpc.Ok() {
-				gpc = gpconn.DialTimeout(address, timeout)
+			conn, err := net.DialTimeout("ip4:icmp", address, timeout)
+			if err != nil {
+				log.Fatalln(err.Error())
 			}
 
+			remoteAddr := conn.RemoteAddr()
+			icmp := ICMP{}
 			icmp.Type = 8
 			icmp.SequenceNumber = uint16(i)
 			pid := os.Getpid()
 			icmp.Identifier = binary.BigEndian.Uint16([]byte{byte(pid >> 8), byte(pid & 0xfff)})
 
+			if i == 0 {
+				fmt.Printf("PING %s (%s): %d data bytes\n", address, remoteAddr, binary.Size(icmp))
+			}
+
 			var buffer bytes.Buffer
-			err := binary.Write(&buffer, binary.BigEndian, icmp)
+			err = binary.Write(&buffer, binary.BigEndian, icmp)
 			if err != nil {
 				log.Fatalln(err.Error())
 			}
@@ -67,9 +67,12 @@ func main() {
 			request[2] = byte(checkSum >> 8)
 			request[3] = byte(checkSum)
 
-			gpc.SetDeadline(time.Now().Add(timeout))
+			err = conn.SetDeadline(time.Now().Add(timeout))
+			if err != nil {
+				log.Fatalln(err.Error())
+			}
 
-			_, err = gpc.Write(request)
+			_, err = conn.Write(request)
 			if err != nil {
 				log.Fatalln(err.Error())
 			} else {
@@ -78,10 +81,10 @@ func main() {
 
 			response := make([]byte, 1024)
 			startReplyTime := time.Now()
-			r, err := gpc.Read(response)
+			r, err := conn.Read(response)
 			if err != nil {
+				_ = conn.Close()
 				fmt.Printf("Request timeout for icmp_seq %d\n", icmp.SequenceNumber)
-				gpc.Close()
 				time.Sleep(time.Second)
 				continue
 			} else {
