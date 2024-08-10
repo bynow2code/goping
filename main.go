@@ -31,7 +31,6 @@ var (
 	totalT      int64
 	minDelay    int64 = math.MaxInt64
 	maxDelay    int64 = math.MinInt64
-	avgDelay    float64
 	transmitted int
 	received    int
 )
