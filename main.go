@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"log"
 	"math"
@@ -24,7 +25,7 @@ type ICMP struct {
 
 var (
 	address string
-	timeout time.Duration = 1000 * time.Millisecond
+	timeout time.Duration
 )
 
 var (
@@ -37,6 +38,7 @@ var (
 
 func init() {
 	log.SetFlags(log.Llongfile)
+	flagParse()
 	setAddress()
 }
 
@@ -113,18 +115,27 @@ func main() {
 	fmt.Printf("\n--- %s ping statistics ---\n", address)
 	fmt.Printf("%d packets transmitted, %d packets received, %.2f%% packet loss\n", transmitted, received, loss)
 
-	maxTime := float64(maxDelay) / float64(time.Millisecond)
-	minTime := float64(minDelay) / float64(time.Millisecond)
-	avgTime := float64(totalT) / float64(transmitted) / float64(time.Millisecond)
+	maxTime := 0.0
+	minTime := 0.0
+	avgTime := 0.0
+	if transmitted == 0 {
+		maxTime = float64(maxDelay) / float64(time.Millisecond)
+		minTime = float64(minDelay) / float64(time.Millisecond)
+		avgTime = float64(totalT) / float64(transmitted) / float64(time.Millisecond)
+	}
 	fmt.Printf("round-trip min/max/avg = %.3f/%.3f/%.3f\n", minTime, maxTime, avgTime)
 	os.Exit(0)
 }
 
 func setAddress() {
 	if len(os.Args) == 1 {
-		log.Fatalln("Address required")
+		log.Fatalln("address required")
 	}
 	address = os.Args[len(os.Args)-1]
+}
+func flagParse() {
+	flag.DurationVar(&timeout, "t", 1000*time.Millisecond, "设置icmp拨号、请求和响应等待时间")
+	flag.Parse()
 }
 func calculateICMPChecksum(buf []byte) uint16 {
 	var sum uint32
