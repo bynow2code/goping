@@ -28,6 +28,7 @@ var (
 )
 
 var (
+	totalT      int64
 	minDelay    int64 = math.MaxInt64
 	maxDelay    int64 = math.MinInt64
 	avgDelay    float64
@@ -94,6 +95,7 @@ func main() {
 			} else {
 				received++
 				t := time.Since(startReplyTime).Nanoseconds()
+				totalT += t
 				maxDelay = max(t, maxDelay)
 				minDelay = min(t, minDelay)
 
@@ -114,7 +116,8 @@ func main() {
 
 	maxTime := float64(maxDelay) / float64(time.Millisecond)
 	minTime := float64(minDelay) / float64(time.Millisecond)
-	fmt.Printf("round-trip min/max = %.3f/%.3f/\n", minTime, maxTime)
+	avgTime := float64(totalT) / float64(transmitted) / float64(time.Millisecond)
+	fmt.Printf("round-trip min/max/avg = %.3f/%.3f/%.3f\n", minTime, maxTime, avgTime)
 	os.Exit(0)
 }
 
